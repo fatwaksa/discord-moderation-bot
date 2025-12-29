@@ -55,6 +55,7 @@ def add_points(guild_id, user_id, amount):
 load_points()
 
 # ------------------------
+# تحذيرات
 warnings = {}
 
 # ------------------------
@@ -229,20 +230,38 @@ async def eight_ball(ctx, *, question):
     await ctx.send(f"🎱 {ctx.author.mention} سؤالك: {question}\nالإجابة: **{random.choice(responses)}**")
 
 # ------------------------
-# الترحيب الذكي واستجابات مخصصة
+# الترحيب بالمستخدم والمغادرة
+@bot.event
+async def on_member_join(member):
+    channel = discord.utils.get(member.guild.text_channels, name="general")
+    if channel:
+        await channel.send(f"👋 حي الله الشيخ {member.mention}!")
+
+@bot.event
+async def on_member_remove(member):
+    channel = discord.utils.get(member.guild.text_channels, name="general")
+    if channel:
+        await channel.send(f"👋 ودعناك الله {member.mention}!")
+
+# ------------------------
+# استجابات ذكية
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
     content = message.content.lower()
-    if content in ["تمرة", "تمره", "tmrh", "tmrh"]:
+    if any(word in content for word in ["تمرة", "تمره", "tmrh"]):
         await message.channel.send(f"👋 أهلاً وسهلاً {message.author.mention}!")
 
     if "صدام حسين" in content:
-        await message.channel.send("نعم ابو عداي")
+        await message.channel.send("نعم ابو عدي")
     if "اطلق قرار الحكم" in content:
-        await message.channel.send(f"⚖️ نطلق قرار الحكم على المدعي {message.author.mention}!")
+        await message.channel.send(f"نطلق قرار الحكم ضل واقف ولك {message.author.mention}!")
+    if "ياسر" in content:
+        await message.channel.send(f"فكفكلو رهملو ضبطلو غنالو يلا ياطنقور {message.author.mention}")
+    if "عبدالعزيز" in content:
+        await message.channel.send(f"عبيلو وارقصلو وغنيلو طرشووووله {message.author.mention}")
 
     await bot.process_commands(message)
 
@@ -269,10 +288,9 @@ class XOButton(Button):
         self.style = discord.ButtonStyle.danger if mark=="❌" else discord.ButtonStyle.success
         self.disabled = True
         view.board[self.y][self.x] = mark
-        # تحقق الفوز
         winner = view.check_winner()
         if winner:
-            add_points(interaction.guild.id, view.current_player.id, 10)  # نقاط للفائز
+            add_points(interaction.guild.id, view.current_player.id, 10)
             await interaction.response.edit_message(content=f"🎉 {winner} فاز!", view=view)
             view.stop()
             return
@@ -302,9 +320,9 @@ class XOView(View):
 
     def check_winner(self):
         b = self.board
-        lines = b + [list(x) for x in zip(*b)]  # صفوف وأعمدة
-        lines.append([b[i][i] for i in range(3)])  # قطري \
-        lines.append([b[i][2-i] for i in range(3)])  # قطري /
+        lines = b + [list(x) for x in zip(*b)]
+        lines.append([b[i][i] for i in range(3)])
+        lines.append([b[i][2-i] for i in range(3)])
         for line in lines:
             if line[0] != "" and all(cell == line[0] for cell in line):
                 return self.current_player.mention
