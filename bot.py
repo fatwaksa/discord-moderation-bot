@@ -1,10 +1,9 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ui import View, Button
 from datetime import datetime
 import os
 import random
-import asyncio
 import json
 
 # ------------------------
@@ -208,45 +207,15 @@ async def leaderboard(ctx):
     await ctx.send(embed=embed)
 
 # ------------------------
-# أمر التحقق مع زر التحذيرات
-class WarningsButton(Button):
-    def __init__(self, member):
-        super().__init__(label="عرض التحذيرات", style=discord.ButtonStyle.primary)
-        self.member = member
-
-    async def callback(self, interaction):
-        user_warnings = warnings.get(self.member.id, [])
-        if not user_warnings:
-            await interaction.response.send_message("✅ لا توجد تحذيرات لهذا المستخدم.", ephemeral=True)
-            return
-        msg = f"⚠️ تحذيرات {self.member.mention}:\n"
-        for i, w in enumerate(user_warnings, 1):
-            msg += f"{i}. السبب: {w['reason']} | بواسطة: {w['by']} | في: {w['time']}\n"
-        await interaction.response.send_message(msg, ephemeral=True)
-
-@bot.command(aliases=['تحقق'])
-async def verify(ctx, member: discord.Member = None):
-    member = member or ctx.author
-    pts = get_points(ctx.guild.id, member.id)
-    user_warnings = warnings.get(member.id, [])
-    roles = [role.name for role in member.roles if role.name != "@everyone"]
-
-    embed = discord.Embed(title=f"ℹ️ معلومات المستخدم: {member}", color=0x3498db)
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-    embed.add_field(name="الاسم الكامل", value=str(member), inline=True)
-    embed.add_field(name="المعرف (ID)", value=member.id, inline=True)
-    embed.add_field(name="تاريخ الانضمام للسيرفر", value=member.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
-    embed.add_field(name="تاريخ إنشاء الحساب", value=member.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
-    embed.add_field(name="النقاط الحالية", value=f"**{pts}** نقطة", inline=False)
-    embed.add_field(name="عدد التحذيرات", value=f"{len(user_warnings)} تحذير" if user_warnings else "✅ لا توجد تحذيرات", inline=True)
-    embed.add_field(name="الحالة", value=str(member.status).title(), inline=True)
-    embed.add_field(name="أعلى رتبة", value=member.top_role.name, inline=True)
-    embed.add_field(name="جميع الأدوار", value=", ".join(roles) if roles else "لا يوجد أدوار", inline=False)
-
-    view = View()
-    if user_warnings:
-        view.add_item(WarningsButton(member))
-    await ctx.send(embed=embed, view=view)
+# أمر الألعاب الكامل
+@bot.command()
+async def games(ctx):
+    embed = discord.Embed(title="🎮 أوامر الألعاب", color=0x00ff00)
+    embed.add_field(name="!roll", value="رمي نرد والحصول على رقم عشوائي من 1 إلى 6", inline=False)
+    embed.add_field(name="!coin", value="رمي عملة ورؤية النتيجة: رأس أو ذيل", inline=False)
+    embed.add_field(name="!eight_ball <سؤال>", value="طرح سؤال على البوت والحصول على إجابة عشوائية", inline=False)
+    embed.add_field(name="!xo @الخصم", value="بدء لعبة XO بينك وبين عضو آخر", inline=False)
+    await ctx.send(embed=embed)
 
 # ------------------------
 # ألعاب بسيطة
@@ -265,7 +234,7 @@ async def eight_ball(ctx, *, question):
     if not question.endswith("?"):
         await ctx.send("❓ يجب أن يكون سؤالاً!")
         return
-    responses = ["نعم بالتأكيد! 👍", "لا أبداً ❌", "ربما... 🤔", "اسأل مرة أخرى لاحقاً ⏳",
+    responses = ["نعم بالتأكيد! ❤️", "لا أبداً ❌", "ربما... 🤔", "اسأل مرة أخرى لاحقاً ⏳",
                  "الإجابة غير واضحة الآن 🌫️", "من الأفضل ألا أخبرك الآن 😶",
                  "كل الدلائل تشير إلى نعم ✅", "لا تعتمد عليه 🚫"]
     await ctx.send(f"🎱 {ctx.author.mention} سؤالك: {question}\nالإجابة: **{random.choice(responses)}**")
@@ -276,13 +245,13 @@ async def eight_ball(ctx, *, question):
 async def on_member_join(member):
     channel = discord.utils.get(member.guild.text_channels, name="general")
     if channel:
-        await channel.send(f"👋 حي الله الشيخ {member.mention}!")
+        await channel.send(f"👋 حي الله الشيخ {member.mention} ❤️!")
 
 @bot.event
 async def on_member_remove(member):
     channel = discord.utils.get(member.guild.text_channels, name="general")
     if channel:
-        await channel.send(f"👋 ودعناك الله {member.mention}!")
+        await channel.send(f"👋 ودعناك الله {member.mention} ❤️!")
 
 # ------------------------
 # استجابات ذكية
@@ -292,23 +261,22 @@ async def on_message(message):
         return
 
     content = message.content.lower()
-    # ردود محددة
     if any(word in content for word in ["تمرة", "تمره", "tmrh"]):
-        await message.channel.send(f"👋 أهلاً وسهلاً {message.author.mention}!")
+        await message.channel.send(f"👋 امرني يالكنق {message.author.mention}")
     if "صدام حسين" in content:
-        await message.channel.send("نعم ابو عدي")
+        await message.channel.send("نعم ابو عدي ❤️")
     if "اطلق قرار الحكم" in content:
-        await message.channel.send(f"نطلق قرار الحكم ضل واقف  {message.author.mention}!")
+        await message.channel.send(f"نطلق قرار الحكم ضل واقف  {message.author.mention}")
     if "ياسر" in content:
         await message.channel.send(f"فكفكلو رهملو ضبطلو غنالو يلا ياطنقور {message.author.mention}")
     if "عبدالعزيز" in content:
         await message.channel.send(f"عبيلو وارقصلو وغنيلو طرشووووله {message.author.mention}")
     if "فارس" in content:
-        await message.channel.send("❤️ القلب")
+        await message.channel.send("القلب ❤️")
     if "مشعل" in content:
-        await message.channel.send("سطيف")
+        await message.channel.send("القلب ❤️")
     if "بندر" in content:
-        await message.channel.send("عميل كوريا شوكت تهتز الشوارب لو بس ادري")
+        await message.channel.send("القلب ❤️")
 
     await bot.process_commands(message)
 
