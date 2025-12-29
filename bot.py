@@ -1,14 +1,13 @@
 import discord
 from discord.ext import commands, tasks
+from discord.ui import View, Button
 from datetime import datetime
 import os
 import random
 import asyncio
 import json
-import atexit
 
 # ------------------------
-# Intents المطلوبة
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -18,11 +17,7 @@ intents.reactions = True
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # ------------------------
-# قاموس التحذيرات لكل عضو
-warnings = {}
-
-# ------------------------
-# نظام النقاط
+# نقاط المستخدمين
 POINTS_FILE = "points.json"
 points = {}
 
@@ -58,10 +53,18 @@ def add_points(guild_id, user_id, amount):
     save_points()
 
 load_points()
-atexit.register(save_points)
 
 # ------------------------
-# Logging
+warnings = {}
+
+# ------------------------
+@bot.event
+async def on_ready():
+    print(f'✅ البوت الآن متصل كـ: {bot.user}')
+    print(f"📊 تم تحميل نقاط {sum(len(users) for users in points.values())} مستخدم")
+
+# ------------------------
+# Embed للوغ
 def create_log_embed(title, description, color=0x00ff00):
     embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -72,13 +75,6 @@ async def log_action(guild, embed):
     if not log_channel:
         log_channel = await guild.create_text_channel('mod-log')
     await log_channel.send(embed=embed)
-
-# ------------------------
-# عند تشغيل البوت
-@bot.event
-async def on_ready():
-    print(f'✅ البوت الآن متصل كـ: {bot.user}')
-    print(f"📊 تم تحميل نقاط {sum(len(users) for users in points.values())} مستخدم")
 
 # ------------------------
 # أوامر الإدارة
@@ -138,11 +134,9 @@ async def warn(ctx, member: discord.Member, *, reason="لم يتم ذكر سبب
     if member.id not in warnings:
         warnings[member.id] = []
     warnings[member.id].append({'reason': reason, 'by': ctx.author.name, 'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-    
     embed = create_log_embed("تم التحذير ⚠️", f"{member.mention} تم تحذيره!\nالسبب: {reason}\nبواسطة: {ctx.author.mention}")
     await ctx.send(embed=embed)
     await log_action(ctx.guild, embed)
-    
     if len(warnings[member.id]) >= 3:
         await member.kick(reason="تجاوز عدد التحذيرات 3")
         embed2 = create_log_embed("تم الطرد تلقائياً ⚠️", f"{member.mention} تم طرده تلقائياً بعد 3 تحذيرات.")
@@ -187,119 +181,72 @@ async def unmute(ctx, member: discord.Member):
         await ctx.send(f"❌ {member.mention} ليس مكتمًا!")
 
 # ------------------------
-# XO Games
-xo_games = {}
+# أوامر النقاط
+@bot.command(aliases=['points'])
+async def mypoints(ctx):
+    pts = get_points(ctx.guild.id, ctx.author.id)
+    embed = discord.Embed(title="🏆 نقاطك", color=0x00ff00)
+    embed.add_field(name="اللاعب", value=ctx.author.mention, inline=False)
+    embed.add_field(name="النقاط", value=f"**{pts}** نقطة", inline=False)
+    embed.set_thumbnail(url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
+    await ctx.send(embed=embed)
 
-class XOView(discord.ui.View):
-    def __init__(self, player1, player2):
-        super().__init__(timeout=None)
-        self.players = [player1, player2]
-        self.current = 0
-        self.board = ["⬜"]*9
-        self.message = None
-        self.add_buttons()
-    
-    def add_buttons(self):
-        for i in range(9):
-            self.add_item(discord.ui.Button(label=" ", style=discord.ButtonStyle.secondary, row=i//3, custom_id=str(i)))
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        return True
-
-    async def handle_click(self, interaction: discord.Interaction, pos: int):
-        if interaction.user != self.players[self.current]:
-            await interaction.response.send_message("❌ ليس دورك!", ephemeral=True)
-            return
-        if self.board[pos] != "⬜":
-            await interaction.response.send_message("❌ هذه الخانة مشغولة!", ephemeral=True)
-            return
-
-        symbol = "❌" if self.current == 0 else "⭕"
-        self.board[pos] = symbol
-        self.current = 1 - self.current
-        await self.update_buttons()
-
-        winner = await self.check_winner(interaction)
-        if winner:
-            for child in self.children:
-                child.disabled = True
-            if winner == "Tie":
-                await interaction.response.edit_message(content=f"⚖️ تعادل!\n{''.join(self.board[i] for i in [0,1,2])}\n{''.join(self.board[i] for i in [3,4,5])}\n{''.join(self.board[i] for i in [6,7,8])}", view=self)
-            else:
-                winner_user = interaction.user
-                add_points(interaction.guild.id, winner_user.id, 10)
-                await interaction.response.edit_message(content=f"🎉 {winner_user.mention} فاز وحصل على **+10** نقاط! 🏆\n{''.join(self.board[i] for i in [0,1,2])}\n{''.join(self.board[i] for i in [3,4,5])}\n{''.join(self.board[i] for i in [6,7,8])}", view=self)
-            del xo_games[interaction.channel.id]
-        else:
-            await interaction.response.edit_message(content=f"الآن دور: {self.players[self.current].mention}\n{''.join(self.board[i] for i in [0,1,2])}\n{''.join(self.board[i] for i in [3,4,5])}\n{''.join(self.board[i] for i in [6,7,8])}", view=self)
-
-    async def update_buttons(self):
-        for i, btn in enumerate(self.children):
-            btn.label = self.board[i]
-
-    async def check_winner(self, interaction: discord.Interaction):
-        b = self.board
-        lines = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
-        for i,j,k in lines:
-            if b[i] == b[j] == b[k] and b[i] != "⬜":
-                return b[i]
-        if "⬜" not in b:
-            return "Tie"
-        return None
-
-@bot.command()
-async def xo(ctx, opponent: discord.Member):
-    if ctx.author == opponent:
-        await ctx.send("❌ لا تلعب مع نفسك!")
+@bot.command(aliases=['top', 'lb'])
+async def leaderboard(ctx):
+    guild_points = points.get(str(ctx.guild.id), {})
+    if not guild_points:
+        await ctx.send("📭 لا توجد نقاط مسجلة في هذا السيرفر بعد!")
         return
-    if ctx.channel.id in xo_games:
-        await ctx.send("❌ هناك لعبة قائمة بالفعل!")
-        return
-
-    view = XOView(ctx.author, opponent)
-    board_display = "⬜⬜⬜\n⬜⬜⬜\n⬜⬜⬜"
-    message = await ctx.send(f"🎮 لعبة XO بين {ctx.author.mention} (❌) و {opponent.mention} (⭕)\nدور البداية: {ctx.author.mention}\n{board_display}", view=view)
-    view.message = message
-    xo_games[ctx.channel.id] = view
+    sorted_players = sorted(guild_points.items(), key=lambda x: x[1], reverse=True)[:10]
+    embed = discord.Embed(title=f"🏆 أعلى 10 لاعبين في {ctx.guild.name}", color=0xffd700)
+    ranks = ["🥇","🥈","🥉","🏅","🏅","🏅","🏅","🏅","🏅","🏅"]
+    for i, (user_id, pts) in enumerate(sorted_players):
+        user = bot.get_user(int(user_id))
+        name = user.display_name if user else f"مستخدم غادر ({user_id})"
+        embed.add_field(name=f"{ranks[i]} المركز {i+1}", value=f"{name} → **{pts}** نقطة", inline=False)
+    await ctx.send(embed=embed)
 
 # ------------------------
-# Quiz أسئلة جاهزة
-quiz_questions = [
-    {"question": "ما عاصمة السعودية؟", "options": ["جدة","الرياض","مكة","الدمام"], "answer": 1},
-    {"question": "أكبر كوكب في المجموعة الشمسية؟", "options": ["الأرض","المريخ","المشتري","زحل"], "answer": 2},
-    {"question": "ما هو الحيوان الأسرع؟", "options": ["الفهد","الأسد","الذئب","النسور"], "answer": 0},
-    {"question": "كم عدد أيام الأسبوع؟", "options": ["5","6","7","8"], "answer": 2},
-]
+# ألعاب بسيطة
+@bot.command()
+async def roll(ctx):
+    number = random.randint(1, 6)
+    await ctx.send(f"🎲 {ctx.author.mention} رميت النرد وحصلت على: **{number}**")
 
-# باقي الألعاب (roll, coin, rpssolo, guess, 8ball) يمكن إضافتها بنفس طريقة الكود السابق
+@bot.command()
+async def coin(ctx):
+    side = random.choice(["**رأس** 🪙", "**ذيل** 🪙"])
+    await ctx.send(f"🪙 {ctx.author.mention} رميت العملة وطلعت: {side}")
+
+@bot.command()
+async def eight_ball(ctx, *, question):
+    if not question.endswith("?"):
+        await ctx.send("❓ يجب أن يكون سؤالاً!")
+        return
+    responses = ["نعم بالتأكيد! 👍", "لا أبداً ❌", "ربما... 🤔", "اسأل مرة أخرى لاحقاً ⏳",
+                 "الإجابة غير واضحة الآن 🌫️", "من الأفضل ألا أخبرك الآن 😶",
+                 "كل الدلائل تشير إلى نعم ✅", "لا تعتمد عليه 🚫"]
+    await ctx.send(f"🎱 {ctx.author.mention} سؤالك: {question}\nالإجابة: **{random.choice(responses)}**")
 
 # ------------------------
-# أمر المساعدة
-@bot.command()
-async def help(ctx):
-    help_msg = """
-📌 **أوامر الإدارة:**
-- `!kick @user سبب` → طرد عضو
-- `!ban @user سبب` → حظر عضو
-- `!unban username#1234` → إلغاء حظر
-- `!clear عدد` → حذف رسائل
-- `!warn @user سبب` → تحذير عضو
-- `!warnings_list @user` → عرض تحذيرات
-- `!mute @user` → كتم (نص وصوت)
-- `!unmute @user` → فك كتم
+# الترحيب الذكي واستجابات مخصصة
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
 
-📌 **أوامر الألعاب والنقاط:**
-- `!roll` → رمية نرد 🎲
-- `!coin` → رمية عملة 🪙
-- `!xo @user` → لعبة XO (+10 نقاط)
-- `!rpssolo` → حجر ورقة مقص ضد البوت (+10 نقاط)
-- `!guess` → تخمين رقم (+10 نقاط)
-- `!quiz` → كويز عشوائي (+15 نقطة عند الإجابة الصحيحة)
-- `!8ball سؤال` → الكرة السحرية 8 🎱
-- `!points` → عرض نقاطك 🏆
-- `!leaderboard` أو `!top` → أعلى 10 لاعبين في السيرفر
-"""
-    await ctx.send(help_msg)
+    content = message.content.lower()
+    # الترحيب
+    if content in ["تمرة", "تمره", "tmrh", "tmrh"]:
+        await message.channel.send(f"👋 أهلاً وسهلاً {message.author.mention}!")
+
+    # استجابات مخصصة
+    if "صدام حسين" in content:
+        await message.channel.send("نعم ابو عداي")
+    if "اطلق قرار الحكم" in content:
+        await message.channel.send(f"⚖️ نطلق قرار الحكم على المدعي {message.author.mention}!")
+
+    await bot.process_commands(message)
 
 # ------------------------
 # تشغيل البوت
