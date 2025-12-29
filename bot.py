@@ -208,6 +208,47 @@ async def leaderboard(ctx):
     await ctx.send(embed=embed)
 
 # ------------------------
+# أمر التحقق مع زر التحذيرات
+class WarningsButton(Button):
+    def __init__(self, member):
+        super().__init__(label="عرض التحذيرات", style=discord.ButtonStyle.primary)
+        self.member = member
+
+    async def callback(self, interaction):
+        user_warnings = warnings.get(self.member.id, [])
+        if not user_warnings:
+            await interaction.response.send_message("✅ لا توجد تحذيرات لهذا المستخدم.", ephemeral=True)
+            return
+        msg = f"⚠️ تحذيرات {self.member.mention}:\n"
+        for i, w in enumerate(user_warnings, 1):
+            msg += f"{i}. السبب: {w['reason']} | بواسطة: {w['by']} | في: {w['time']}\n"
+        await interaction.response.send_message(msg, ephemeral=True)
+
+@bot.command(aliases=['تحقق'])
+async def verify(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    pts = get_points(ctx.guild.id, member.id)
+    user_warnings = warnings.get(member.id, [])
+    roles = [role.name for role in member.roles if role.name != "@everyone"]
+
+    embed = discord.Embed(title=f"ℹ️ معلومات المستخدم: {member}", color=0x3498db)
+    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+    embed.add_field(name="الاسم الكامل", value=str(member), inline=True)
+    embed.add_field(name="المعرف (ID)", value=member.id, inline=True)
+    embed.add_field(name="تاريخ الانضمام للسيرفر", value=member.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
+    embed.add_field(name="تاريخ إنشاء الحساب", value=member.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
+    embed.add_field(name="النقاط الحالية", value=f"**{pts}** نقطة", inline=False)
+    embed.add_field(name="عدد التحذيرات", value=f"{len(user_warnings)} تحذير" if user_warnings else "✅ لا توجد تحذيرات", inline=True)
+    embed.add_field(name="الحالة", value=str(member.status).title(), inline=True)
+    embed.add_field(name="أعلى رتبة", value=member.top_role.name, inline=True)
+    embed.add_field(name="جميع الأدوار", value=", ".join(roles) if roles else "لا يوجد أدوار", inline=False)
+
+    view = View()
+    if user_warnings:
+        view.add_item(WarningsButton(member))
+    await ctx.send(embed=embed, view=view)
+
+# ------------------------
 # ألعاب بسيطة
 @bot.command()
 async def roll(ctx):
@@ -251,9 +292,9 @@ async def on_message(message):
         return
 
     content = message.content.lower()
+    # ردود محددة
     if any(word in content for word in ["تمرة", "تمره", "tmrh"]):
         await message.channel.send(f"👋 أهلاً وسهلاً {message.author.mention}!")
-
     if "صدام حسين" in content:
         await message.channel.send("نعم ابو عدي")
     if "اطلق قرار الحكم" in content:
@@ -262,6 +303,12 @@ async def on_message(message):
         await message.channel.send(f"فكفكلو رهملو ضبطلو غنالو يلا ياطنقور {message.author.mention}")
     if "عبدالعزيز" in content:
         await message.channel.send(f"عبيلو وارقصلو وغنيلو طرشووووله {message.author.mention}")
+    if "فارس" in content:
+        await message.channel.send("❤️ القلب")
+    if "مشعل" in content:
+        await message.channel.send("سطيف")
+    if "بندر" in content:
+        await message.channel.send("عميل كوريا شوكت تهتز الشوارب لو بس ادري")
 
     await bot.process_commands(message)
 
