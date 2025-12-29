@@ -257,7 +257,7 @@ async def on_message(message):
     if "صدام حسين" in content:
         await message.channel.send("نعم ابو عدي")
     if "اطلق قرار الحكم" in content:
-        await message.channel.send(f"نطلق قرار الحكم ضل واقف ولك {message.author.mention}!")
+        await message.channel.send(f"نطلق قرار الحكم ضل واقف  {message.author.mention}!")
     if "ياسر" in content:
         await message.channel.send(f"فكفكلو رهملو ضبطلو غنالو يلا ياطنقور {message.author.mention}")
     if "عبدالعزيز" in content:
