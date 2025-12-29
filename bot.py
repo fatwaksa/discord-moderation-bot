@@ -236,17 +236,90 @@ async def on_message(message):
         return
 
     content = message.content.lower()
-    # الترحيب
     if content in ["تمرة", "تمره", "tmrh", "tmrh"]:
         await message.channel.send(f"👋 أهلاً وسهلاً {message.author.mention}!")
 
-    # استجابات مخصصة
     if "صدام حسين" in content:
         await message.channel.send("نعم ابو عداي")
     if "اطلق قرار الحكم" in content:
         await message.channel.send(f"⚖️ نطلق قرار الحكم على المدعي {message.author.mention}!")
 
     await bot.process_commands(message)
+
+# ------------------------
+# لعبة XO متكاملة
+class XOButton(Button):
+    def __init__(self, x, y):
+        super().__init__(style=discord.ButtonStyle.secondary, label="\u200b", row=y)
+        self.x = x
+        self.y = y
+        self.clicked = False
+
+    async def callback(self, interaction):
+        view: XOView = self.view
+        if interaction.user != view.current_player:
+            await interaction.response.send_message(f"❌ ليس دورك!", ephemeral=True)
+            return
+        if self.clicked:
+            await interaction.response.send_message(f"❌ هذه الخانة مشغولة!", ephemeral=True)
+            return
+        self.clicked = True
+        mark = "❌" if view.current_player == view.player1 else "⭕"
+        self.label = mark
+        self.style = discord.ButtonStyle.danger if mark=="❌" else discord.ButtonStyle.success
+        self.disabled = True
+        view.board[self.y][self.x] = mark
+        # تحقق الفوز
+        winner = view.check_winner()
+        if winner:
+            add_points(interaction.guild.id, view.current_player.id, 10)  # نقاط للفائز
+            await interaction.response.edit_message(content=f"🎉 {winner} فاز!", view=view)
+            view.stop()
+            return
+        view.switch_player()
+        board_display = view.board_to_string()
+        await interaction.response.edit_message(content=f"🎮 XO بين {view.player1.mention} (❌) و {view.player2.mention} (⭕)\nدور: {view.current_player.mention}\n{board_display}", view=view)
+
+class XOView(View):
+    def __init__(self, player1, player2):
+        super().__init__(timeout=300)
+        self.player1 = player1
+        self.player2 = player2
+        self.current_player = player1
+        self.board = [["" for _ in range(3)] for _ in range(3)]
+        for y in range(3):
+            for x in range(3):
+                self.add_item(XOButton(x, y))
+
+    def switch_player(self):
+        self.current_player = self.player2 if self.current_player == self.player1 else self.player1
+
+    def board_to_string(self):
+        s = ""
+        for row in self.board:
+            s += "".join(cell if cell else "➖" for cell in row) + "\n"
+        return s
+
+    def check_winner(self):
+        b = self.board
+        lines = b + [list(x) for x in zip(*b)]  # صفوف وأعمدة
+        lines.append([b[i][i] for i in range(3)])  # قطري \
+        lines.append([b[i][2-i] for i in range(3)])  # قطري /
+        for line in lines:
+            if line[0] != "" and all(cell == line[0] for cell in line):
+                return self.current_player.mention
+        if all(all(cell != "" for cell in row) for row in b):
+            return "❌ التعادل ⭕"
+        return None
+
+@bot.command()
+async def xo(ctx, opponent: discord.Member):
+    if opponent.bot or opponent == ctx.author:
+        await ctx.send("❌ لا يمكن اللعب مع البوت أو نفسك!")
+        return
+    view = XOView(ctx.author, opponent)
+    board_display = view.board_to_string()
+    await ctx.send(f"🎮 لعبة XO بين {ctx.author.mention} (❌) و {opponent.mention} (⭕)\nدور البداية: {ctx.author.mention}\n{board_display}", view=view)
 
 # ------------------------
 # تشغيل البوت
